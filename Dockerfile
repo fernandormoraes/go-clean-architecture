@@ -1,7 +1,22 @@
-FROM alpine:latest
+FROM golang:1.8 as goimage
 
-RUN apk --no-cache add ca-certificates
+RUN go get -u github.com/golang/dep/cmd/dep
+
 WORKDIR /root/
 
-COPY ./.bin/app .
-COPY ./config/ ./config/
+COPY . app/
+WORKDIR app/
+
+ENV PORT 9090
+
+RUN dep ensure
+
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o ./.bin/app ./cmd/api/main.go
+
+FROM alpine:3.6 as baseimagealp
+RUN apk add --no-cache bash
+ENV WORK_DIR=/docker/bin
+WORKDIR $WORK_DIR
+COPY --from=goimage /go/src/github.com/aditmayapada/tryout/bin ./
+ENTRYPOINT /docker/bin/main
+EXPOSE 9090

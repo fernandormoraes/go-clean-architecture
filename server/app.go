@@ -2,48 +2,39 @@ package server
 
 import (
 	"context"
-	"github.com/gin-gonic/gin"
-	"github.com/spf13/viper"
-	"go.mongodb.org/mongo-driver/mongo"
-	"go.mongodb.org/mongo-driver/mongo/options"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
 	"os/signal"
 	"time"
 
-	"github.com/fernandormoraes/go-clean-architecture/auth"
-	"github.com/fernandormoraes/go-clean-architecture/bookmark"
+	"github.com/gin-gonic/gin"
+	"github.com/spf13/viper"
+	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 
-	authhttp "github.com/fernandormoraes/go-clean-architecture/auth/delivery/http"
-	authmongo "github.com/fernandormoraes/go-clean-architecture/auth/repository/mongo"
-	authusecase "github.com/fernandormoraes/go-clean-architecture/auth/usecase"
+	externaldatasource "github.com/fernandormoraes/go-clean-architecture/data/datasources/external"
+	datarepository "github.com/fernandormoraes/go-clean-architecture/data/repositories"
+	"github.com/fernandormoraes/go-clean-architecture/domain/usecases"
+
 	bmhttp "github.com/fernandormoraes/go-clean-architecture/bookmark/delivery/http"
-	bmmongo "github.com/fernandormoraes/go-clean-architecture/bookmark/repository/mongo"
-	bmusecase "github.com/fernandormoraes/go-clean-architecture/bookmark/usecase"
 )
 
 type App struct {
 	httpServer *http.Server
 
-	bookmarkUC bookmark.UseCase
-	authUC     auth.UseCase
+	bookmarkUC usecases.BookmarkUseCase
 }
 
 func NewApp() *App {
 	db := initDB()
 
-	userRepo := authmongo.NewUserRepository(db, viper.GetString("mongo.user_collection"))
-	bookmarkRepo := bmmongo.NewBookmarkRepository(db, viper.GetString("mongo.bookmark_collection"))
+	bookmarkExternalDatasource := externaldatasource.NewDbBookmarkDatasource(db, viper.GetString("mongo.bookmark_collection"))
+	bookmarkRepo := datarepository.NewBookmarkRepository(bookmarkExternalDatasource)
 
 	return &App{
-		bookmarkUC: bmusecase.NewBookmarkUseCase(bookmarkRepo),
-		authUC: authusecase.NewAuthUseCase(
-			userRepo,
-			viper.GetString("auth.hash_salt"),
-			[]byte(viper.GetString("auth.signing_key")),
-			viper.GetDuration("auth.token_ttl"),
-		),
+		bookmarkUC: *usecases.NewBookmarkUseCase(bookmarkRepo),
 	}
 }
 
@@ -55,13 +46,7 @@ func (a *App) Run(port string) error {
 		gin.Logger(),
 	)
 
-	// Set up http handlers
-	// SignUp/SignIn endpoints
-	authhttp.RegisterHTTPEndpoints(router, a.authUC)
-
-	// API endpoints
-	authMiddleware := authhttp.NewAuthMiddleware(a.authUC)
-	api := router.Group("/api", authMiddleware)
+	api := router.Group("/api")
 
 	bmhttp.RegisterHTTPEndpoints(api, a.bookmarkUC)
 
@@ -109,6 +94,8 @@ func initDB() *mongo.Database {
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	fmt.Print("Database connected")
 
 	return client.Database(viper.GetString("mongo.name"))
 }
