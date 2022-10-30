@@ -3,9 +3,9 @@ package http
 import (
 	"net/http"
 
-	"github.com/fernandormoraes/go-clean-architecture/auth"
-	"github.com/fernandormoraes/go-clean-architecture/bookmark"
-	models "github.com/fernandormoraes/go-clean-architecture/domain/entities"
+	"github.com/fernandormoraes/go-clean-architecture/data/dto"
+	"github.com/fernandormoraes/go-clean-architecture/domain/entities"
+	"github.com/fernandormoraes/go-clean-architecture/domain/usecases"
 	"github.com/gin-gonic/gin"
 )
 
@@ -16,10 +16,10 @@ type Bookmark struct {
 }
 
 type Handler struct {
-	useCase bookmark.UseCase
+	useCase usecases.BookmarkUseCase
 }
 
-func NewHandler(useCase bookmark.UseCase) *Handler {
+func NewHandler(useCase usecases.BookmarkUseCase) *Handler {
 	return &Handler{
 		useCase: useCase,
 	}
@@ -37,7 +37,11 @@ func (h *Handler) Create(c *gin.Context) {
 		return
 	}
 
-	user := c.MustGet(auth.CtxUserKey).(*models.User)
+	user := &entities.User{
+		ID:       "1",
+		Username: "Fernando",
+		Password: "Teste",
+	}
 
 	if err := h.useCase.CreateBookmark(c.Request.Context(), user, inp.URL, inp.Title); err != nil {
 		c.AbortWithStatus(http.StatusInternalServerError)
@@ -48,11 +52,15 @@ func (h *Handler) Create(c *gin.Context) {
 }
 
 type getResponse struct {
-	Bookmarks []*Bookmark `json:"bookmarks"`
+	Bookmarks []*dto.ReadBookmarkDTO `json:"bookmarks"`
 }
 
 func (h *Handler) Get(c *gin.Context) {
-	user := c.MustGet(auth.CtxUserKey).(*models.User)
+	user := &entities.User{
+		ID:       "1",
+		Username: "Fernando",
+		Password: "Teste",
+	}
 
 	bms, err := h.useCase.GetBookmarks(c.Request.Context(), user)
 	if err != nil {
@@ -61,45 +69,6 @@ func (h *Handler) Get(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, &getResponse{
-		Bookmarks: toBookmarks(bms),
+		Bookmarks: bms,
 	})
-}
-
-type deleteInput struct {
-	ID string `json:"id"`
-}
-
-func (h *Handler) Delete(c *gin.Context) {
-	inp := new(deleteInput)
-	if err := c.BindJSON(inp); err != nil {
-		c.AbortWithStatus(http.StatusBadRequest)
-		return
-	}
-
-	user := c.MustGet(auth.CtxUserKey).(*models.User)
-
-	if err := h.useCase.DeleteBookmark(c.Request.Context(), user, inp.ID); err != nil {
-		c.AbortWithStatus(http.StatusInternalServerError)
-		return
-	}
-
-	c.Status(http.StatusOK)
-}
-
-func toBookmarks(bs []*models.Bookmark) []*Bookmark {
-	out := make([]*Bookmark, len(bs))
-
-	for i, b := range bs {
-		out[i] = toBookmark(b)
-	}
-
-	return out
-}
-
-func toBookmark(b *models.Bookmark) *Bookmark {
-	return &Bookmark{
-		ID:    b.ID,
-		URL:   b.URL,
-		Title: b.Title,
-	}
 }
